@@ -89,7 +89,6 @@ def get_email_details(message):
     sender = next((header['value'] for header in headers if header['name'] == 'From'), 'Unknown Sender')
     date = next((header['value'] for header in headers if header['name'] == 'Date'), 'Unknown Date')
     
-    # Get email body
     body = ''
     if 'parts' in message['payload']:
         for part in message['payload']['parts']:
@@ -107,22 +106,17 @@ def get_email_details(message):
     }
 
 def main():
-    # Get Gmail service
     service = get_gmail_service()
     
-    # Example usage
     print("Enter search criteria:")
     subject_query = input("Enter subject to search (press Enter to skip): ")
     start_date = input("Enter start date (YYYY/MM/DD) or press Enter to skip: ")
     end_date = input("Enter end date (YYYY/MM/DD) or press Enter to skip: ")
     
-    # Build search query
     query = f'subject:{subject_query}' if subject_query else ''
     
-    # Search for emails
     messages = search_emails(service, query, start_date, end_date)
     
-    # Display results
     print(f"\nFound {len(messages)} messages:")
     for message in messages:
         details = get_email_details(message)
@@ -130,7 +124,7 @@ def main():
         print(f"Subject: {details['subject']}")
         print(f"From: {details['sender']}")
         print(f"Date: {details['date']}")
-        print(f"Body: {details['body'][:200]}...")  # Show first 200 characters of body
+        print(f"Body: {details['body'][:200]}...") 
 
 if __name__ == '__main__':
     main() 
