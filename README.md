@@ -55,7 +55,15 @@ python invoice_processor.py
    - A browser window will open
    - Sign in to your Google account
    - Click "Allow" to give the tool permission to read your emails
-   - The tool will save this permission for future use
+   - The tool will create a `token.pickle` file that saves your permission
+   - This means you won't need to sign in again next time
+
+### About token.pickle
+- This file is created automatically after your first successful sign-in
+- It stores your Google account permission securely
+- As long as this file exists, you won't need to sign in again
+- If you want to use a different Google account, just delete this file
+- The file is created in the same folder as your script
 
 3. The tool will then:
    - Look for new emails from the last 7 days
@@ -93,6 +101,7 @@ The tool creates a spreadsheet (`invoice_data.csv`) with these columns:
 - If you want to look at a different time period, you can change the `days_back` number in the script
 - The spreadsheet is easy to open in Excel or Google Sheets
 - If you need to start fresh, you can delete the `invoice_data.csv` file
+- Keep your `token.pickle` file safe - it's your key to accessing your emails without signing in again
 
 ## Troubleshooting
 
@@ -103,4 +112,4 @@ If something goes wrong:
 
 ## Need Help?
 
-If you run into any problems or have questions, feel free to ask! The tool is designed to be user-friendly, but sometimes things need a little tweaking to work just right for your specific needs. I tried this out in colab initially but ran into permission issues, so switched back to VS code. 
+If you run into any problems or have questions, feel free to ask! The tool is designed to be user-friendly, but sometimes things need a little tweaking to work just right for your specific needs (I tried this out in colab initially but ran into permission issues, so switched back to VS code).
