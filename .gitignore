@@ -1,3 +1,8 @@
+#credentials and token files from gmail
+credentials.json
+token.pickle
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
