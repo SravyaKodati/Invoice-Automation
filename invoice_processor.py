@@ -190,7 +190,7 @@ class InvoiceProcessor:
             }
             new_records.append(new_record)
         
-        # Update the CSV file
+        # Update the CSV file with new records
         if new_records:
             new_df = pd.DataFrame(new_records)
             df = pd.concat([df, new_df], ignore_index=True)
@@ -200,7 +200,6 @@ class InvoiceProcessor:
             logger.info("No new records to add")
 
 def main():
-    # Initialize the processor with your OpenAI API key
     processor = InvoiceProcessor(openai_api_key='your-openai-api-key')
     
     # Process emails from the last 7 days
