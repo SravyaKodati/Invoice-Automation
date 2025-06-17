@@ -1,50 +1,106 @@
-# Gmail Reader
+# Invoice Email Processor
 
-This script allows you to read and filter emails from your Gmail account based on subject lines and date ranges.
+This tool helps you automatically extract invoice details from your Gmail emails. It reads your emails, finds invoice information, and saves it to a spreadsheet.
 
-## Setup Instructions
+## What This Tool Does
 
-1. First, install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Reads your Gmail emails
+2. Looks for invoice details like:
+   - Invoice numbers
+   - Amount due
+   - Due dates
+3. If it can't find some information, it uses AI to help find it
+4. Saves everything to a spreadsheet that you can easily check
 
-2. Set up Google Cloud Project and enable Gmail API:
-   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select an existing one
-   - Enable the Gmail API for your project
-   - Go to the Credentials page
-   - Create an OAuth 2.0 Client ID
-   - Download the credentials and save them as `credentials.json` in the same directory as the script
+## Setup Steps
 
-3. Run the script:
-   ```bash
-   python gmail_reader.py
-   ```
+### 1. Install Required Tools
+First, install the tools you need by running this command:
+```bash
+pip install -r requirements.txt
+```
 
-## Usage
+### 2. Set Up Gmail Access
+You need to give the tool permission to read your emails:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or use an existing one)
+3. Look for "Gmail API" and turn it on
+4. Go to "Credentials"
+5. Click "Create Credentials" and choose "OAuth 2.0 Client ID"
+6. Download the credentials and save them as `credentials.json` in the same folder as the script
 
-When you run the script for the first time, it will:
-1. Open your default web browser
-2. Ask you to sign in to your Google account
-3. Request permission to access your Gmail
-4. Save the authentication token for future use
+### 3. Get an OpenAI API Key
+You'll need this for the AI part that helps find missing information:
+1. Go to [OpenAI's website](https://platform.openai.com/)
+2. Sign up or log in
+3. Go to your account settings
+4. Create a new API key
+5. Copy the key - you'll need it in the next step
 
-After authentication, you can:
-- Search for emails by subject
-- Filter emails by date range
-- View email details including sender, subject, date, and body
+### 4. Update the Script
+Open `invoice_processor.py` and find this line near the bottom:
+```python
+processor = InvoiceProcessor(openai_api_key='your-openai-api-key')
+```
+Replace 'your-openai-api-key' with the API key you copied.
 
-## Features
+## How to Use
 
-- Search emails by subject line
-- Filter emails by date range
-- View email details (sender, subject, date, body)
-- Secure authentication using OAuth 2.0
-- Automatic token refresh
+1. Run the script:
+```bash
+python invoice_processor.py
+```
 
-## Notes
+2. The first time you run it:
+   - A browser window will open
+   - Sign in to your Google account
+   - Click "Allow" to give the tool permission to read your emails
+   - The tool will save this permission for future use
 
-- The script requires Python 3.6 or higher
-- Make sure to keep your `credentials.json` and `token.pickle` files secure
-- The script only has read-only access to your Gmail account 
+3. The tool will then:
+   - Look for new emails from the last 7 days
+   - Find invoice information in these emails
+   - Save the information to a file called `invoice_data.csv`
+
+## What You'll Get
+
+The tool creates a spreadsheet (`invoice_data.csv`) with these columns:
+- `email_id`: A unique number for each email
+- `invoice_number`: The invoice number found in the email
+- `amount_due`: How much needs to be paid
+- `due_date`: When the payment is due
+- `extraction_date`: When the tool found this information
+
+## How It Works
+
+1. **Email Reading**:
+   - The tool checks your Gmail for new emails
+   - It looks at emails from the last 7 days (you can change this)
+
+2. **Information Finding**:
+   - First, it looks for information using specific patterns (like "Invoice #123" or "Due by July 1, 2025")
+   - If it can't find something, it uses AI to help look for it
+   - The AI is smart enough to understand different ways people might write the same information
+
+3. **Saving Information**:
+   - All found information goes into a spreadsheet
+   - New information gets added to the existing spreadsheet
+   - You won't get duplicate entries
+
+## Tips
+
+- The tool only looks at new emails it hasn't seen before
+- If you want to look at a different time period, you can change the `days_back` number in the script
+- The spreadsheet is easy to open in Excel or Google Sheets
+- If you need to start fresh, you can delete the `invoice_data.csv` file
+
+## Troubleshooting
+
+If something goes wrong:
+1. Check that your `credentials.json` file is in the right place and permissions are enabled on google cloud
+2. Make sure you've put in your OpenAI API key correctly
+3. If you get an error about permissions, try deleting the `token.pickle` file and running the script again
+
+## Need Help?
+
+If you run into any problems or have questions, feel free to ask! The tool is designed to be user-friendly, but sometimes things need a little tweaking to work just right for your specific needs. I tried this out in colab initially but ran into permission issues, so switched back to VS code. 
