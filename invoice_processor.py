@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from google.oauth2.credentials import Credentials
@@ -48,53 +48,93 @@ class InvoiceProcessor:
     def _initialize_output_file(self):
         """Create output file if it doesn't exist."""
         if not os.path.exists(self.output_file):
-            df = pd.DataFrame(columns=['email_id', 'invoice_number', 'due_date', 'budget', 'extraction_date'])
+            df = pd.DataFrame(columns=['email_id', 'invoice_number', 'amount_due', 'due_date', 'extraction_date'])
             df.to_csv(self.output_file, index=False)
 
-    def extract_invoice_details(self, email_body):
+    def extract_invoice_details(self, email_body, sent_date):
         """Extract invoice details using regex patterns."""
-        patterns = {
-            'invoice_number': r'(?i)invoice\s*(?:number|#|no)?[:#]?\s*([A-Z0-9-]+)',
-            'due_date': r'(?i)due\s*date[:#]?\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-            'budget': r'(?i)(?:budget|amount|total)[:#]?\s*[$€£]?\s*([\d,]+\.?\d*)'
+        info = {
+            "invoice_number": None,
+            "amount_due": None,
+            "due_date": None
         }
-        
-        extracted_data = {}
-        for field, pattern in patterns.items():
-            match = re.search(pattern, email_body)
-            extracted_data[field] = match.group(1) if match else None
-        
-        return extracted_data
 
-    def validate_with_llm(self, email_body, field, current_value):
-        """Use LLM to validate and extract missing values."""
+        # Invoice number
+        match = re.search(r'invoice\s*[#:]*\s*(\d+)', email_body, re.IGNORECASE)
+        if match:
+            info["invoice_number"] = match.group(1)
+
+        # Amount
+        match = re.search(r'\$\s?([\d,]+(?:\.\d{2})?)', email_body)
+        if match:
+            info["amount_due"] = f"${match.group(1)}"
+
+        # Explicit due date
+        match = re.search(r'due (?:by|on|before)?\s*(\w+ \d{1,2}(?:st|nd|rd|th)?(?:,? \d{4})?)', email_body, re.IGNORECASE)
+        if match:
+            try:
+                info["due_date"] = str(datetime.strptime(match.group(1).replace(',', ''), "%B %d %Y").date())
+            except:
+                try:
+                    info["due_date"] = str(datetime.strptime(match.group(1), "%B %d").replace(year=sent_date.year).date())
+                except:
+                    pass
+
+        # Relative terms: Net 15, within 30 days, etc.
+        match = re.search(r'(net|within)\s*(\d{1,2})', email_body, re.IGNORECASE)
+        if match and sent_date:
+            days = int(match.group(2))
+            info["due_date"] = str((sent_date + timedelta(days=days)).date())
+
+        return info
+
+    def validate_with_llm(self, email_body, extracted_data):
+        """Use LLM to validate and extract missing values in a single API call."""
         prompt = f"""
-        Analyze the following email body and extract the {field} if present. 
-        If the value is clearly missing (not just written differently), respond with 'MISSING_VALUE'.
+        Analyze the following email body and extract invoice details. For each field, if the value is clearly missing (not just written differently), respond with 'MISSING_VALUE'.
         If you find the value, provide it in a clear format.
+        
+        Required fields:
+        1. invoice_number: Extract the invoice number
+        2. amount_due: Extract the amount due (include $ symbol)
+        3. due_date: Extract the due date in YYYY-MM-DD format
+        
+        Current extracted values:
+        {json.dumps(extracted_data, indent=2)}
         
         Email body:
         {email_body}
         
-        Current extracted value: {current_value}
+        Provide your response in JSON format with the following structure:
+        {{
+            "invoice_number": "value or MISSING_VALUE",
+            "amount_due": "value or MISSING_VALUE",
+            "due_date": "value or MISSING_VALUE"
+        }}
         """
         
         try:
             response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a precise data extraction assistant."},
+                    {"role": "system", "content": "You are a precise data extraction assistant. Respond only with valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
             )
             
-            result = response.choices[0].message.content.strip()
-            return result if result != 'MISSING_VALUE' else None
+            result = json.loads(response.choices[0].message.content.strip())
+            
+            # Update only missing values
+            for field, value in result.items():
+                if extracted_data[field] is None and value != "MISSING_VALUE":
+                    extracted_data[field] = value
+            
+            return extracted_data
             
         except Exception as e:
             logger.error(f"Error in LLM validation: {e}")
-            return None
+            return extracted_data
 
     def process_emails(self, days_back=7):
         """Process new emails and update the invoice data file."""
@@ -118,6 +158,11 @@ class InvoiceProcessor:
                 
             msg = self.gmail_service.users().messages().get(userId='me', id=message['id']).execute()
             
+            # Get sent date from email headers
+            headers = msg['payload']['headers']
+            sent_date_str = next((header['value'] for header in headers if header['name'] == 'Date'), None)
+            sent_date = datetime.strptime(sent_date_str, "%a, %d %b %Y %H:%M:%S %z").replace(tzinfo=None) if sent_date_str else datetime.now()
+            
             # Extract email body
             body = ''
             if 'parts' in msg['payload']:
@@ -128,22 +173,19 @@ class InvoiceProcessor:
             elif 'body' in msg['payload'] and 'data' in msg['payload']['body']:
                 body = base64.urlsafe_b64decode(msg['payload']['body']['data']).decode()
             
-            # Extract invoice details
-            extracted_data = self.extract_invoice_details(body)
+            # Extract invoice details using regex
+            extracted_data = self.extract_invoice_details(body, sent_date)
             
-            # Validate missing values with LLM
-            for field, value in extracted_data.items():
-                if value is None:
-                    llm_value = self.validate_with_llm(body, field, value)
-                    if llm_value:
-                        extracted_data[field] = llm_value
+            # If any field is missing, use LLM to validate
+            if any(value is None for value in extracted_data.values()):
+                extracted_data = self.validate_with_llm(body, extracted_data)
             
             # Create new record
             new_record = {
                 'email_id': message['id'],
                 'invoice_number': extracted_data['invoice_number'],
+                'amount_due': extracted_data['amount_due'],
                 'due_date': extracted_data['due_date'],
-                'budget': extracted_data['budget'],
                 'extraction_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             new_records.append(new_record)
